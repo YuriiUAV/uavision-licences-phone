@@ -8,7 +8,7 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 export const utf8 = (s) => enc.encode(s);
 
-export const PRODUCTS = { LINKMANAGER: 'LM' };   // o mesmo que o License Manager (so o Link Manager por agora)
+export const PRODUCTS = { LINKMANAGER: 'LM', CAMVIEWER: 'CV' };   // o mesmo que o License Manager (1.0.7: + CamViewer)
 export const DEMO_DAYS = 30;
 export const ISSUED_BY = 'phone';
 
