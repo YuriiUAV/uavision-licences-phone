@@ -2,7 +2,7 @@
 // Os dados da folha so entram no ecra por textContent (nunca innerHTML): um nome de cliente nao corre codigo.
 import * as C from './core.js';
 
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 const IDLE_LOCK_MS = 3 * 60 * 1000;     // sem mexer
 const HIDDEN_LOCK_MS = 30 * 1000;       // fora da app
 const $ = (id) => document.getElementById(id);
