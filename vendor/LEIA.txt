@@ -1,0 +1,16 @@
+Biblioteca de terceiros incluida na pagina do telemovel (nada e carregado da internet em tempo de execucao).
+
+noble-ed25519-2.3.0.js
+  Origem:   pacote npm @noble/ed25519 versao 2.3.0 (publicado 2025-06-11), ficheiro index.js sem alteracoes.
+  Autor:    Paul Miller (paulmillr.com), licenca MIT (noble-ed25519-LICENSE.txt). RFC 8032.
+  Auditoria: a versao 1 foi auditada pela Cure53 (fev. 2022); esta 2.3.0 e uma reescrita da 1 e, segundo o proprio
+            README, NAO foi auditada de forma independente (testada contra a noble-curves, que foi auditada).
+            Aqui e so a alternativa de reserva e e confirmada contra os vetores do C# e o RFC 8032 (ver testes).
+  Integridade do pacote no registo npm (confirmada no download, 10/11/2026):
+            sha512-M7dvXL2B92/M7dw9+gzuydL8qn/jiqNHaoR3Q+cb1q1GHV7uwE17WCyFMG+Y+TZb5izcaXk5TdJRrDUxHXL78A==
+  SHA-256 deste ficheiro:
+            70cebecaaa6a126ced702198706c49d03f2d6f70317342b75e50e8d2d4951fe5  noble-ed25519-2.3.0.js
+            394c2e6e5552e5dba202bee6390b9d6aa2754d657f5b9869e83b3d265a315501  noble-ed25519-LICENSE.txt
+  Uso:      so se o WebCrypto do Safari nao tiver Ed25519 (ou falhar o autoteste RFC 8032 no arranque). As duas
+            assinam byte a byte igual (Ed25519 e deterministico); os testes provam-no com os vetores do C#.
+  SHA-512:  vem do WebCrypto (crypto.subtle.digest), nao da biblioteca.
