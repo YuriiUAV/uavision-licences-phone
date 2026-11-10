@@ -2,7 +2,7 @@
 // Os dados da folha so entram no ecra por textContent (nunca innerHTML): um nome de cliente nao corre codigo.
 import * as C from './core.js';
 
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.0.6';
 const IDLE_LOCK_MS = 3 * 60 * 1000;     // sem mexer
 const HIDDEN_LOCK_MS = 30 * 1000;       // fora da app
 const $ = (id) => document.getElementById(id);
@@ -329,6 +329,21 @@ function askAccept(r, demo) {
   });
 }
 
+// 1.0.6: Remove from PC (remocao remota), confirmado com Face ID ou password como as aprovacoes.
+function askRemove(r) {
+  openModal({
+    title: 'Remove the licence from that PC?',
+    body: [el('p', { class: 'sheet-sub', text: 'The server marks it as removed. When that PC is online, the program deletes the licence and goes back to demo mode. Offline it keeps working until it connects. The PC can send a new request later.' }),
+      summary(r, r.licence_id || '')],
+    secret: true,
+    run: async () => {
+      await C.removeLicence(r, { url: session.url, adminKey: session.adminKey });
+      msg('Removed ' + r.licence_id + '. That PC goes back to demo mode when it is online.', 'good');
+      await refresh();
+    }
+  });
+}
+
 function askReject(r) {
   openModal({
     title: 'Reject the request?', secret: false, okText: 'Reject', okClass: 'btn destructive block xl',
@@ -376,23 +391,26 @@ async function runModal(getVault) {
 // ---------------------------------------------------------------- historico
 
 function renderHistory() {
-  const done = rows.filter((r) => r.state === C.STATE.ISSUED).sort((a, b) => String(b.decided_utc).localeCompare(String(a.decided_utc)));
+  const done = rows.filter((r) => r.state === C.STATE.ISSUED || (r.state === C.STATE.REMOVED && r.licence)).sort((a, b) => String(b.decided_utc).localeCompare(String(a.decided_utc)));
   const cards = [];
   for (const r of done) {
     let f = null;
     try { f = C.decodeToken(r.licence, 'UAVLIC1', 3).json; } catch (e) { }
     const demo = f && f.type === 'demo';
-    const c = el('div', { class: 'card' },
+    const removed = r.state === C.STATE.REMOVED;
+    const c = el('div', { class: 'card', 'data-licence': r.licence_id || '' },
       el('div', { class: 'head' },
         el('div', { class: 'who' }, el('div', { class: 'company', text: r.company || r.name || '(no company)' }),
           el('div', { class: 'person', text: [r.company ? r.name : '', r.pc].filter(Boolean).join(' · ') })),
-        el('span', { class: 'state Issued', text: demo ? '30-day' : 'Perpetual' })),
+        el('span', { class: removed ? 'state Removed' : 'state Issued', text: removed ? 'Removed' : demo ? '30-day' : 'Perpetual' })),
       el('div', { class: 'meta' }, el('span', { class: 'chip mono', text: r.licence_id || '(no number)' })),
-      info([['Issued', f ? f.issued : ''], ['Valid until', demo && f.expires ? f.expires : ''], ['Issued by', r.issued_by], ['Decided by', r.decided_by]]));
+      info([['Issued', f ? f.issued : ''], ['Valid until', demo && f.expires ? f.expires : ''], ['Issued by', r.issued_by], ['Decided by', r.decided_by],
+        ['Removed', removed ? fmtUtc(r.removed_utc) + (r.removed_by ? ' (' + r.removed_by + ')' : '') : ''], ['Note', removed ? r.removed_note : '']]));
     const chk = el('p', { class: 'sig' }, icon('seal'), el('span', { text: 'Signature: checking...' }));
     c.append(chk);
     C.checkLicence(r.licence, cfg.public_key, engine).then(() => { chk.className = 'sig ok'; chk.lastChild.textContent = 'Signature: matches this key.'; },
       (e) => { chk.className = 'sig bad'; chk.lastChild.textContent = 'Signature does NOT match this key (' + e.message + ').'; });
+    if (!removed) c.append(el('div', { class: 'actions' }, el('button', { class: 'btn text-red wide', text: 'Remove from PC', onclick: () => askRemove(r) })));
     cards.push(c);
   }
   const unpublished = localLog.filter((x) => !x.published);

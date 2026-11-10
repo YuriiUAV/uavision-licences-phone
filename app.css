@@ -138,6 +138,7 @@ details > summary::-webkit-details-marker { display: none; }
 .state.Approved { background: var(--blue-bg); color: var(--blue); }
 .state.Issued { background: var(--green-bg); color: var(--green); }
 .state.Rejected { background: var(--red-bg); color: var(--red); }
+.state.Removed { background: var(--red-bg); color: var(--red); }
 .state.Unpublished { background: var(--amber-bg); color: var(--amber); }
 
 .banner { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 500; background: var(--amber-bg); color: var(--amber); }

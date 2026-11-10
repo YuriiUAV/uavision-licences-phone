@@ -14,7 +14,7 @@ export const ISSUED_BY = 'phone';
 
 // 10/11/2026: a folha passou a ingles. Uma folha (Code.gs) antiga ainda pode responder em portugues: normalise() passa
 // esses valores a ingles para a pagina comparar sempre em ingles.
-export const STATE = { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected', ISSUED: 'Issued' };
+export const STATE = { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected', ISSUED: 'Issued', REMOVED: 'Removed' };
 export const TYPE_PERPETUAL = 'Perpetual', TYPE_DEMO = '30-day demo', YES = 'Yes';
 const OLD_PT = { 'Pendente': 'Pending', 'Aprovado': 'Approved', 'Rejeitado': 'Rejected', 'Emitido': 'Issued', 'Perpétua': 'Perpetual',
   'Demo 30 dias': '30-day demo', 'Sim': 'Yes', 'Não': 'No', 'telemóvel': 'phone', 'folha (à mão)': 'sheet (by hand)' };
@@ -251,6 +251,7 @@ export function functionUrl(url, route) {
 const ERRORS = {
   unauthorized: 'Wrong ADMIN_KEY (or the ADMIN_KEY is not set in the Supabase function secrets).',
   'not approved': 'The request is no longer Approved on the server.',
+  'no such licence': 'The licence does not exist on the server.',
   'already issued': 'This request was already issued.',
   'licence does not match the request': 'The licence does not match the request.',
   'no such request': 'The request no longer exists on the server.',
@@ -364,3 +365,10 @@ export async function approveAndIssue(row, demo, ctx) {
 
 export const rejectRequest = (row, ctx) =>
   callServer(ctx.url, ctx.adminKey, { action: 'admin_decide', request_id: row.request_id, decision: STATE.REJECTED, by: ISSUED_BY }, ctx.fetchImpl);
+
+// 1.0.6: remocao remota (Shared\FORMATO.md 5.1): o servidor marca a licenca como removida; o programa daquele PC apaga-a
+// e volta a demo quando estiver ligado a internet. Diferente da anulacao (Revoke) do License Manager.
+export function removeLicence(row, ctx, note = '') {
+  if (!row.licence_id) return Promise.reject(new Error('This row has no licence number.'));
+  return callServer(ctx.url, ctx.adminKey, { action: 'admin_remove', licence_id: row.licence_id, by: ISSUED_BY, note: String(note || '').substring(0, 300) }, ctx.fetchImpl);
+}
