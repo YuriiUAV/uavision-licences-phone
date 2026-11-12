@@ -15,7 +15,7 @@ export const ISSUED_BY = 'phone';
 // 10/11/2026: a folha passou a ingles. Uma folha (Code.gs) antiga ainda pode responder em portugues: normalise() passa
 // esses valores a ingles para a pagina comparar sempre em ingles.
 export const STATE = { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected', ISSUED: 'Issued', REMOVED: 'Removed' };
-export const TYPE_PERPETUAL = 'Perpetual', TYPE_DEMO = '30-day demo', YES = 'Yes';
+export const TYPE_PERPETUAL = 'Perpetual', TYPE_DEMO = '30-day demo', TYPE_YEAR = '1-year', YES = 'Yes';   // 1.0.8: 1-year
 const OLD_PT = { 'Pendente': 'Pending', 'Aprovado': 'Approved', 'Rejeitado': 'Rejected', 'Emitido': 'Issued', 'Perpétua': 'Perpetual',
   'Demo 30 dias': '30-day demo', 'Sim': 'Yes', 'Não': 'No', 'telemóvel': 'phone', 'folha (à mão)': 'sheet (by hand)' };
 export const normalise = (v) => (Object.prototype.hasOwnProperty.call(OLD_PT, String(v)) ? OLD_PT[String(v)] : v);
@@ -307,14 +307,32 @@ export function newLicenceId(product, requestId, issued, taken) {
   return id;
 }
 
-export function licenceFields(req, { demo, issued, licenceId, keyId, notes = '' }) {
+// 1.0.8 (Shared\FORMATO.md 5.4): o tipo da licenca: 'perpetual', 'year' ou 'demo' (true/false antigos = demo/perpetual)
+export function kindOf(k) { return k === true ? 'demo' : k === 'year' || k === 'demo' ? k : 'perpetual'; }
+export const typeText = (k) => (k === 'demo' ? TYPE_DEMO : k === 'year' ? TYPE_YEAR : TYPE_PERPETUAL);
+
+// O ultimo dia valido: 30 dias = emissao + 29; 1 ano = o mesmo dia e mes do ano seguinte menos um dia (29/2 conta como 28/2).
+// Igual ao LicenceTypes.ExpiresFor do C#.
+export function expiresFor(kind, issued) {
+  if (kind === 'demo') return addDays(issued, DEMO_DAYS - 1);
+  if (kind === 'year') {
+    const y = +issued.substring(0, 4), m = +issued.substring(5, 7); let d = +issued.substring(8, 10);
+    if (m === 2 && d === 29) d = 28;
+    const next = String(y + 1).padStart(4, '0') + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    return addDays(next, -1);
+  }
+  return null;
+}
+
+export function licenceFields(req, { demo, kind, issued, licenceId, keyId, notes = '' }) {
   const c = req.customer || {}, h = req.hwid || {};
+  const k = kind ? kindOf(kind) : kindOf(!!demo);
   return {
-    format: 'UAVLIC1', licence_id: licenceId, key_id: keyId, product: req.product, type: demo ? 'demo' : 'perpetual',
+    format: 'UAVLIC1', licence_id: licenceId, key_id: keyId, product: req.product, type: k,
     request_id: req.request_id,
     customer: { name: String(c.name || ''), company: String(c.company || ''), email: String(c.email || ''), country: String(c.country || '') },
     machine_name: String(req.machine_name || ''), hwid: { uuid: h.uuid || '', disk: h.disk || '', cpu: h.cpu || '' }, hwid_min_match: 2,
-    issued, expires: demo ? addDays(issued, DEMO_DAYS - 1) : null, notes
+    issued, expires: expiresFor(k, issued), notes
   };
 }
 
@@ -338,6 +356,7 @@ export async function checkLicence(token, publicKeyB64, engine) {
 //   ctx: { url, adminKey, seed, keyId, publicKey, engine, rows (todas, para os numeros ja usados), previous (token
 //          ja assinado aqui para este pedido, ou null), takenIds, onSigned(token, fields), now, fetchImpl }
 export async function approveAndIssue(row, demo, ctx) {
+  const kind = kindOf(demo);   // 1.0.8: true / false / 'year' / 'demo' / 'perpetual'
   const req = await requestOfRow(row);
   if (normalise(row.state) === STATE.ISSUED) throw new Error('This request was already issued.');
   let token = ctx.previous || null, fields;
@@ -349,7 +368,7 @@ export async function approveAndIssue(row, demo, ctx) {
     const issued = todayUtc(ctx.now || new Date());
     const taken = new Set((ctx.rows || []).filter((r) => r.request_id !== row.request_id).map((r) => r.licence_id).filter(Boolean));
     for (const x of ctx.takenIds || []) taken.add(x);
-    fields = licenceFields(req, { demo, issued, licenceId: newLicenceId(req.product, req.request_id, issued, taken), keyId: ctx.keyId });
+    fields = licenceFields(req, { kind, issued, licenceId: newLicenceId(req.product, req.request_id, issued, taken), keyId: ctx.keyId });
     token = await signLicence(fields, ctx.seed, ctx.engine);
     const back = await checkLicence(token, ctx.publicKey, ctx.engine);   // nunca publicar uma licenca que nao verifica
     if (back.licence_id !== fields.licence_id) throw new Error('check failed');
@@ -357,7 +376,7 @@ export async function approveAndIssue(row, demo, ctx) {
   }
   if (normalise(row.state) !== STATE.APPROVED)
     await callServer(ctx.url, ctx.adminKey, { action: 'admin_decide', request_id: row.request_id, decision: STATE.APPROVED, by: ISSUED_BY,
-      type: fields.type === 'demo' ? TYPE_DEMO : TYPE_PERPETUAL }, ctx.fetchImpl);
+      type: typeText(fields.type) }, ctx.fetchImpl);
   await callServer(ctx.url, ctx.adminKey, { action: 'admin_publish', request_id: row.request_id, licence: token, licence_id: fields.licence_id,
     hwid_hash: row.hwid_hash, issued_by: ISSUED_BY }, ctx.fetchImpl);
   return { token, fields };

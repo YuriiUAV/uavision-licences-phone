@@ -2,7 +2,7 @@
 // Os dados da folha so entram no ecra por textContent (nunca innerHTML): um nome de cliente nao corre codigo.
 import * as C from './core.js';
 
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.8';
 const IDLE_LOCK_MS = 3 * 60 * 1000;     // sem mexer
 const HIDDEN_LOCK_MS = 30 * 1000;       // fora da app
 const $ = (id) => document.getElementById(id);
@@ -277,11 +277,14 @@ function requestCard(r) {
   const person = [r.company ? r.name : '', r.country].filter(Boolean).join(' · ');
   const acts = el('div', { class: 'actions' });
   if (r.state === C.STATE.APPROVED) {
-    const demo = r.type === C.TYPE_DEMO;
-    acts.append(el('button', { class: 'btn primary wide', text: 'Sign and publish (' + (demo ? '30-day' : 'perpetual') + ')', onclick: () => askAccept(r, demo) }));
+    const k = r.type === C.TYPE_DEMO ? 'demo' : r.type === C.TYPE_YEAR ? 'year' : 'perpetual';
+    acts.append(el('button', { class: 'btn primary wide', text: 'Sign and publish (' + kindLabel(k) + ')', onclick: () => askAccept(r, k) }));
   } else {
-    acts.append(el('button', { class: 'btn primary', text: 'Approve', onclick: () => askAccept(r, false) }),
-      el('button', { class: 'btn tinted', text: '30-day', onclick: () => askAccept(r, true) }));
+    // 1.0.8: Perpetual / 1-year / 30-day (uma linha de tres)
+    acts.classList.add('three');
+    acts.append(el('button', { class: 'btn primary', text: 'Approve', onclick: () => askAccept(r, 'perpetual') }),
+      el('button', { class: 'btn tinted', text: '1-year', onclick: () => askAccept(r, 'year') }),
+      el('button', { class: 'btn tinted', text: '30-day', onclick: () => askAccept(r, 'demo') }));
   }
   acts.append(el('button', { class: 'btn text-red wide', text: 'Reject', onclick: () => askReject(r) }));
   const details = el('details', { class: 'details' }, el('summary', {}, el('span', { text: 'Details' }), icon('chev')),
@@ -303,26 +306,31 @@ function summary(r, typeText) {
     ['Program', (r.product || '') + (r.version ? ' ' + r.version : '')], ['Licence', typeText]]));
 }
 
-function askAccept(r, demo) {
+const kindLabel = (k) => (k === 'demo' ? '30-day' : k === 'year' ? '1-year' : 'perpetual');
+
+function askAccept(r, kind) {
+  kind = C.kindOf(kind);
+  const demo = kind === 'demo';
   const vm = r.vm === C.YES;
   openModal({
-    title: demo ? '30-day licence' : 'Perpetual licence',
-    body: [el('p', { class: 'sheet-sub', text: demo ? 'Valid for 30 days from today (warning 7 days before; then it goes to demo mode).' : 'For this PC, for all versions.' }),
-      summary(r, demo ? '30-day' : 'Perpetual')],
+    title: demo ? '30-day licence' : kind === 'year' ? '1-year licence' : 'Perpetual licence',
+    body: [el('p', { class: 'sheet-sub', text: demo ? 'Valid for 30 days from today (warning 7 days before; then it goes to demo mode).'
+      : kind === 'year' ? 'Valid until ' + C.expiresFor('year', C.todayUtc()) + ' (warning 7 days before; then it goes to demo mode).' : 'For this PC, for all versions.' }),
+      summary(r, demo ? '30-day' : kind === 'year' ? '1-year' : 'Perpetual')],
     warn: vm ? 'Virtual machine: the licence will not work there. Sign anyway?' : '',
     secret: true,
     run: async (vault) => {
       const seed = C.b64Decode(vault.seed);
       try {
         const prev = localLog.find((x) => x.request_id === r.request_id && !x.published);
-        const res = await C.approveAndIssue(r, demo, {
+        const res = await C.approveAndIssue(r, kind, {
           url: session.url, adminKey: session.adminKey, seed, keyId: cfg.key_id, publicKey: cfg.public_key, engine, rows,
           previous: prev ? prev.token : null, takenIds: localLog.map((x) => x.licence_id),
           onSigned: async (token, f) => { addLog({ licence_id: f.licence_id, request_id: f.request_id, company: f.customer.company, name: f.customer.name,
             pc: f.machine_name, type: f.type, issued: f.issued, expires: f.expires, token, published: false }); }
         });
         markPublished(res.fields.licence_id);
-        msg('Issued ' + res.fields.licence_id + ' (' + (res.fields.type === 'demo' ? '30-day, until ' + res.fields.expires : 'perpetual') + '). The customer program installs it by itself.', 'good');
+        msg('Issued ' + res.fields.licence_id + ' (' + (res.fields.expires ? kindLabel(res.fields.type) + ', until ' + res.fields.expires : 'perpetual') + '). The customer program installs it by itself.', 'good');
       } finally { seed.fill(0); }
       await refresh();
     }
@@ -396,13 +404,13 @@ function renderHistory() {
   for (const r of done) {
     let f = null;
     try { f = C.decodeToken(r.licence, 'UAVLIC1', 3).json; } catch (e) { }
-    const demo = f && f.type === 'demo';
+    const demo = f && (f.type === 'demo' || f.type === 'year');   // 1.0.8: com data de fim
     const removed = r.state === C.STATE.REMOVED;
     const c = el('div', { class: 'card', 'data-licence': r.licence_id || '' },
       el('div', { class: 'head' },
         el('div', { class: 'who' }, el('div', { class: 'company', text: r.company || r.name || '(no company)' }),
           el('div', { class: 'person', text: [r.company ? r.name : '', r.pc].filter(Boolean).join(' · ') })),
-        el('span', { class: removed ? 'state Removed' : 'state Issued', text: removed ? 'Removed' : demo ? '30-day' : 'Perpetual' })),
+        el('span', { class: removed ? 'state Removed' : 'state Issued', text: removed ? 'Removed' : f ? kindLabel(f.type).replace('perpetual', 'Perpetual') : 'Perpetual' })),
       el('div', { class: 'meta' }, el('span', { class: 'chip mono', text: r.licence_id || '(no number)' })),
       info([['Issued', f ? f.issued : ''], ['Valid until', demo && f.expires ? f.expires : ''], ['Issued by', r.issued_by], ['Decided by', r.decided_by],
         ['Removed', removed ? fmtUtc(r.removed_utc) + (r.removed_by ? ' (' + r.removed_by + ')' : '') : ''], ['Note', removed ? r.removed_note : '']]));

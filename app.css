@@ -162,6 +162,7 @@ dd { margin: 0; text-align: right; min-width: 0; }
 .actions { display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px; margin-top: 14px; }
 .actions .btn { margin: 0; }
 .actions .wide { grid-column: 1 / -1; }
+.actions.three { grid-template-columns: 1.3fr 1fr 1fr; }   /* 1.0.8: Approve / 1-year / 30-day */
 .actions .btn.text-red { min-height: 40px; padding: 8px; font-size: 16px; }
 
 .sig { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 14px; color: var(--text-2); }
